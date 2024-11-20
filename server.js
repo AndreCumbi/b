@@ -1,97 +1,136 @@
 const express = require("express");
 const cors = require("cors");
-const mysql = require("mysql");
+const supabase = require("./supabaseClient"); // Importando a configuração do Supabase
 
-const app =express();
+const app = express();
 app.use(express.json());
 app.use(cors());
 
-const db = mysql.createConnection({
-    host: "localhost",
-    user: "root",
-    password: "",
-    database: "crud"
-})
+// Rota para listar todos os livros
+app.get("/", async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from("livros")
+            .select("*");
 
-app.get("/", (req, res)=>{
-    const sql = "Select * from livros";
-    db.query(sql,(err,data)=>{
-        if(err) return res.json("Erro");
+        if (error) return res.status(500).json({ error: error.message });
         return res.json(data);
-    })
-})
-
-app.get("/detalhes/:id", (req, res) => {
-    const sql = "SELECT * FROM livros WHERE id = ?";
-    const id = req.params.id;
-
-    db.query(sql, [id], (err, data) => {
-        if (err) return res.status(500).json("Erro");
-        if (data.length === 0) return res.status(404).json("Livro não encontrado");
-        return res.json(data[0]);
-    });
+    } catch (err) {
+        return res.status(500).json({ error: "Erro ao buscar livros" });
+    }
 });
 
-app.post('/create', (req, res) =>{
-    const sql = "INSERT INTO livros (`titulo`,`autor`,`descricao`,`preco`) VALUES (?)";
-    const values = [
-        req.body.titulo,
-        req.body.autor,
-        req.body.descricao,
-        req.body.preco
-    ]
-    db.query(sql,[values],(err, data) =>{
-        if(err) return res.json("ERRO");
-        return res.json(data);
-    })
-})
+// Rota para buscar os detalhes de um livro por ID
+app.get("/detalhes/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+        const { data, error } = await supabase
+            .from("livros")
+            .select("*")
+            .eq("id", id)
+            .single();
 
-app.put('/update/:id', (req, res) =>{
-    const sql = "Update livros set `titulo`=?, `autor`=?, `descricao`=?, `preco`=? where id = ?";
-    const values = [
-        req.body.titulo,
-        req.body.autor,
-        req.body.descricao,
-        req.body.preco
-    ]
-    const id = req.params.id;
-    db.query(sql,[...values, id],(err, data) =>{
-        if(err) return res.json("ERRO");
-        return res.json(data);
-    })
-})
+        if (error) return res.status(500).json({ error: error.message });
+        if (!data) return res.status(404).json({ message: "Livro não encontrado" });
 
-app.delete('/delete/:id', (req, res) =>{
-    const sql = "Delete from livros where id = ?";
-    const id = req.params.id;
-    db.query(sql,id,(err, data) =>{
-        if(err) return res.json("ERRO");
         return res.json(data);
-    })
-})
-
-app.put('/alugar/:id', (req, res) => {
-    const sql = "UPDATE livros SET `stock` = stock - ? WHERE id = ?";
-    const id = req.params.id; 
-    const values = [1, id]; 
-
-    db.query(sql, values, (err, data) => {
-        if (err) return res.json("ERRO");
-        return res.json(data);
-    });
+    } catch (err) {
+        return res.status(500).json({ error: "Erro ao buscar o livro" });
+    }
 });
 
-app.put('/comprar/:id', (req, res) => {
-    const sql = "UPDATE livros SET `stock`=`stock`-? WHERE id = ?";
-    const id = req.params.id; 
-    const values = [1, id]; 
+// Rota para criar um novo livro
+app.post("/create", async (req, res) => {
+    const { titulo, autor, descricao, preco, stock } = req.body;
+    try {
+        const { data, error } = await supabase
+            .from("livros")
+            .insert([
+                { titulo, autor, descricao, preco, stock }
+            ]);
 
-    db.query(sql, values, (err, data) => {
-        if (err) return res.json("ERRO");
-        return res.json(data);
-    });
+        if (error) return res.status(500).json({ error: error.message });
+        return res.status(201).json(data);
+    } catch (err) {
+        return res.status(500).json({ error: "Erro ao criar livro" });
+    }
 });
 
-app.listen(8081,()=>{
-    console.log("Ouvindo");
-})
+// Rota para atualizar um livro existente
+app.put("/update/:id", async (req, res) => {
+    const { id } = req.params;
+    const { titulo, autor, descricao, preco, stock } = req.body;
+    try {
+        const { data, error } = await supabase
+            .from("livros")
+            .update({ titulo, autor, descricao, preco, stock })
+            .eq("id", id);
+
+        if (error) return res.status(500).json({ error: error.message });
+        return res.json(data);
+    } catch (err) {
+        return res.status(500).json({ error: "Erro ao atualizar livro" });
+    }
+});
+
+// Rota para excluir um livro
+app.delete("/delete/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+        const { data, error } = await supabase
+            .from("livros")
+            .delete()
+            .eq("id", id);
+
+        if (error) return res.status(500).json({ error: error.message });
+        return res.json(data);
+    } catch (err) {
+        return res.status(500).json({ error: "Erro ao excluir livro" });
+    }
+});
+
+// Rota para alugar (decrementar o estoque)
+app.put("/alugar/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+        const { data, error } = await supabase
+            .from("livros")
+            .update({ stock: supabase.raw('stock - 1') })
+            .eq("id", id);
+
+        if (error) return res.status(500).json({ error: error.message });
+        return res.json(data);
+    } catch (err) {
+        return res.status(500).json({ error: "Erro ao alugar livro" });
+    }
+});
+
+// Rota para comprar (decrementar o estoque)
+app.put("/comprar/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+        console.log(`Tentando atualizar o estoque do livro com ID: ${id}`);
+        
+        // Decrementa o estoque do livro no Supabase
+        const { data, error } = await supabase
+            .from("livros")
+            .update({ stock: supabase.raw('stock - 1') }) // Decrementa o estoque
+            .eq("id", id); // Onde o ID do livro é igual ao parâmetro da URL
+
+        if (error) {
+            console.error('Erro ao atualizar livro:', error.message);
+            return res.status(500).json({ error: error.message });
+        }
+        
+        console.log('Livro atualizado com sucesso:', data);
+        return res.json(data);
+    } catch (err) {
+        console.error('Erro inesperado:', err);
+        return res.status(500).json({ error: "Erro ao comprar livro" });
+    }
+});
+
+// Iniciar o servidor
+app.listen(8081, () => {
+    console.log("Servidor rodando na porta 8081");
+});
